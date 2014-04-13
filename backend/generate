@@ -1,0 +1,662 @@
+#!/usr/bin/php -q
+<?
+
+set_include_path(get_include_path() . PATH_SEPARATOR . './js-extractor-read-only/library/');
+
+require_once 'JS/DOM/Element.php';
+require_once 'JS/DOM/Document.php';
+require_once 'JS/Extractor/Element.php';
+require_once 'JS/Extractor/Exception.php';
+require_once 'JS/Extractor.php';
+require_once "functions.php";
+
+setlocale(LC_ALL, 'de_DE@euro', 'de_DE', 'de', 'ge');
+
+// Braunschweig
+processMensa("http://www.stw-on.de/braunschweig/essen/menus/mensa-1", "./kath");
+processMensa("http://www.stw-on.de/braunschweig/essen/menus/mensa-1-kommende-woche", "./kath_b");
+
+processMensa("http://www.stw-on.de/braunschweig/essen/menus/360-2", "./360");
+processMensa("http://www.stw-on.de/braunschweig/essen/menus/360-nachste-woche", "./360_b");
+
+processMensa("http://www.stw-on.de/braunschweig/essen/menus/mensa-2", "./beeth");
+processMensa("http://www.stw-on.de/braunschweig/essen/menus/mensa-2-kommende-woche", "./beeth_b");
+
+processMensa("http://www.stw-on.de/braunschweig/essen/menus/mensa-hbk", "./hbk");
+processMensa("http://www.stw-on.de/braunschweig/essen/menus/mensa-hbk-kommende-woche", "./hbk_b");
+
+// Hildesheim
+processMensa("http://www.stw-on.de/hildesheim/essen/menus/mensa-uni", "./hiuni");
+processMensa("http://www.stw-on.de/hildesheim/essen/menus/mensa-uni-kommende-woche", "./hiuni_b");
+
+processMensa("http://www.stw-on.de/hildesheim/essen/menus/mensa-hohnsen", "./hiho");
+processMensa("http://www.stw-on.de/hildesheim/essen/menus/mensa-hohnsen-kommende-woche", "./hiho_b");
+
+// Lueneburg
+processMensa("http://www.stw-on.de/lueneburg/essen/speiseplaene/mensa-campus", "./luecam");
+processMensa("http://www.stw-on.de/lueneburg/essen/speiseplaene/mensa-campus-kommende-woche", "./luecam_b");
+
+processMensa("http://www.stw-on.de/lueneburg/essen/speiseplaene/rotes-feld", "./luerof");
+processMensa("http://www.stw-on.de/lueneburg/essen/speiseplaene/rotes-feld-kommende-woche", "./luerof_b");
+
+// TU Sozialraum
+# processSozialraum("https://www.tu-braunschweig.de/kantine/speiseplan", "sozi");
+
+function processMensa($Url, $Dir) {
+  while( ProcessMensaDo($Url, $Dir) < 0 ) {
+    echo "sleeping...\n";
+    sleep(60);
+  }
+}
+
+function ProcessMensaDo($Url, $Dir) {
+  $Cell = MensaToTable($Url);
+  if( !is_array($Cell) ) {
+    return $Cell;
+  }
+
+  return TableToOutput($Cell, $Url, $Dir);
+}
+
+function processSozialraum($Url, $Dir) {
+  while( ProcessSozialraumDo($Url, $Dir) < 0 ) {
+    echo "sleeping...\n";
+    sleep(60);
+  }
+}
+
+function ProcessSozialraumDo($Url, $Dir) {
+  $Cell = SozialraumToTable($Url);
+  if( !is_array($Cell) ) {
+    return $Cell;
+  }
+
+  return TableToOutput($Cell, $Url, $Dir);
+}
+
+function SozialraumToTable($Url) {
+  $Data = file_get_contents($Url);
+  if( !$Data ) {
+    return -1;
+  }
+
+  // $Data = utf8_decode($Data);
+
+  $extractor = new JS_Extractor($Data);
+  if( !$extractor ) {
+    return -1;
+  }
+
+  $body = $extractor->query("body")->item(0);
+  if( !$body ) {
+    return -1;
+  }
+
+  $tables = $body->query("//table");
+  if( !$tables ) {
+    return -1;
+  }
+
+  $Table = Array();
+  $Tag = null;
+  for($h=0; $h<$tables->length; $h++) {
+    $table = $tables->item($h);
+  
+    $data = $table->extract(array(".//tr", "td|th"));
+
+    $Rows = Array();
+
+    if( count($data) > 0 ) {
+      foreach($data as $line) {
+        if( strlen(trim($line[0])) > 0 ) {
+          if( count($Rows) > 0 ) {
+            $Table[][0] = $Rows;
+            $Rows = Array();
+          }
+
+          $Tag = trim($line[0]);
+          $TagI = GetDayI($Tag);
+        }
+
+        if( strlen(trim($line[1])) > 5 && strlen(trim($line[2])) > 0 ) {
+          $Rows[] = Array($line[1], "", "", str_replace("€", "", $line[2]), "");
+        }
+      }
+
+      if( count($Rows) > 0 ) {
+        $Table[][0] = $Rows;
+        $Rows = Array();
+      }
+    }
+  }
+
+  return $Table;
+}
+
+function MensaToTable($Url) {
+  $Cell = Array();
+  $OldTag = "";
+
+  // echo "Wapilizing $Url ...\n";
+
+  $Data = file_get_contents($Url);
+  if( !$Data ) {
+    return -1;
+  }
+
+  // $Data = utf8_decode($Data);
+
+  $extractor = new JS_Extractor($Data);
+  if( !$extractor ) {
+    return -1;
+  }
+
+  $body = $extractor->query("body")->item(0);
+  if( !$body ) {
+    return -1;
+  }
+
+  $tables = $body->query("//table");
+  if( !$tables ) {
+    return -1;
+  }
+
+  for($h=0; $h<$tables->length; $h++) {
+    $table = $tables->item($h);
+  
+    $data = $table->extract(array(".//tr", "td|th"));
+
+    $Head = $data[0][0];
+
+    if( eregi("Mittag", $Head) || eregi("Pizza", $Head) ) {
+      $Zeit = "M";
+    } elseif( eregi("Abend", $Head) ) {
+      $Zeit = "A";
+    } else {
+      $Zeit = "";
+      echo "Mensagang nicht erkannt\n";
+    }
+
+    if( eregi("([a-zA-Z]+), ([0-9]{1,2})\. ([a-zA-ZäöüÄÖÜ]+) ([0-9]{2,4})", $Head, $out) ) {
+      $TagS = GetDay($out[1]);
+      $Tag = GetDayI($out[1]);
+    } else {
+      echo "Datum nicht erkannt\n";
+    }
+
+    if( $TagS != $OldTag ) {
+      $Names[$Tag] = $TagS;
+    }
+
+    $OldTag = $TagS;
+
+    /*
+    // if( $Dir == "./kath" && $data[0][0] == "Freitag, 1. April 2011 – Mittagsmensa" ) {
+    if( $Dir == "./kath" && eregi("1\. April", $data[0][0] ) ) {
+      $data[2][1] = "Lahmacun AT (r)";
+      $data[3][1] = "Rippchen satt (v)";
+      $data[4][1] = "Spaghetti Bologna (v)";
+      $data[5][1] = "Hüftsteak Schuhsohle mit Kräuterbutter und Pommes (r)";
+    }
+    */
+
+// Essenstypen die angezeigt werden sollen
+$Typen = Array("Suppe", "Classic", "Essen", "Garten", "Pizza", "Pasta", "Wok");
+
+    foreach($data as $Row) {
+      $Ok = false;
+  
+      foreach($Typen as $Typ) {
+        if( eregi($Typ, $Row[0]) && !eregi("mehr", $Row[0]) ) {
+          $Ok = true;
+          break;
+        }
+      }
+
+//      if( eregi("Essen", $Row[0]) ) {
+      if( $Ok ) {
+/* Hat früher den Essenstyp (A, B, C, V, W) vor das Essen geschrieben
+        if( eregi(" ([A-Z]{1})", $Row[0], $out) ) {
+          $Row[1] = $out[1] . ": " . $Row[1];
+        }
+*/
+        
+        $Row[0] = $Row[1];
+        $Row[1] = "";
+
+        while( eregi("(\([a-zA-Z0-9 ,]+\))", $Row[0], $out) ) {
+          $Row[0] = str_replace($out[1], "", $Row[0]);
+          $Row[1] .= $out[1];
+        }      
+
+        $Row[0] = str_replace("  ", " ", $Row[0]);
+        $Row[1] = str_replace(")(", ",", $Row[1]); 
+        $Row[1] = str_replace("(", "", $Row[1]);
+        $Row[1] = str_replace(")", "", $Row[1]);
+
+      
+        $Row[2] = str_replace(" €", "", $Row[2]);
+        $Row[3] = str_replace(" €", "", $Row[3]);
+        $Row[4] = str_replace(" €", "", $Row[4]);
+
+        if( $Zeit == "M" ) {
+          $Cell[$Tag][0][] = $Row;
+        } elseif( $Zeit == "A") {
+          $Cell[$Tag][2][] = $Row;
+        } else {
+          die("failure");
+        }
+      }
+    } 
+  }
+
+  return $Cell;
+}
+
+function TableToOutput($Cell, $Url, $Dir) {
+  $Names = Array(0 => "mo",
+                 1 => "di",
+                 2 => "mi",
+                 3 => "do",
+                 4 => "fr",
+                 5 => "sa");
+
+	// Now the structure: $Cell[Day][Table][Row][Col]
+
+  foreach($Names as $h => $Name) {
+		$xm = fopen($Dir . "/" . $Name . ".xml", "w");
+		$fp = fopen($Dir . "/" . $Name . ".wml", "w");
+		$rs = fopen($Dir . "/" . $Name . ".rss", "w");
+		$ht = fopen($Dir . "/" . $Name . ".html", "w");
+		$cs = fopen($Dir . "/" . $Name . ".csv", "w");
+    $lg_m = fopen($Dir . "/m_" . $Name . "_large.html", "w");
+    $lg_a = fopen($Dir . "/a_" . $Name . "_large.html", "w");
+
+		fputs($ht, "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n");
+		fputs($ht, "<html xmlns=\"http://www.w3.org/1999/xhtml\" lang=\"en\" xml:lang=\"en\">\n");
+
+		fputs($lg_m, "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n");
+		fputs($lg_m, "<html xmlns=\"http://www.w3.org/1999/xhtml\" lang=\"en\" xml:lang=\"en\">\n");
+		fputs($lg_a, "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n");
+		fputs($lg_a, "<html xmlns=\"http://www.w3.org/1999/xhtml\" lang=\"en\" xml:lang=\"en\">\n");
+
+		fputs($xm, "<?xml version='1.0'?>\n");
+		fputs($fp, "<?xml version=\"1.0\"?".">\n<!DOCTYPE wml PUBLIC \"-//WAPFORUM//DTD WML 1.1//EN\" \"http://www.wapforum.org/DTD/wml_1.1.xml\">\n<wml>\n\n");
+		fputs($rs, 
+"<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<rss version=\"2.0\" xmlns:atom=\"http://www.w3.org/2005/Atom\">
+<channel>
+	<description>Essen am " . GetDayFromSDay($Name) . "</description>
+	<language>de</language>
+	<title>" . GetDayFromSDay($Name) . " - Mensa Essen via RSS</title>
+	<link>http://www.tu-braunschweig.de/</link>
+	<atom:link href=\"http://www.trivalg.de/mensa/" . $Dir . "/" . $Name . ".rss\" rel=\"self\" type=\"application/rss+xml\" />
+");
+
+		fputs($ht,
+"	<head>
+		<title>Essen am " . GetDayFromSDay($Name) . "</title>
+    <meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\" />
+
+<!--		<meta http-equiv=\"Content-Type\" content=\"text/html;charset=iso-8859-15\" /> -->
+
+	</head>
+<body>
+<h2>Essen am ". GetDayFromSDay($Name) . "</h2>
+<table border=\"0\">
+");
+
+		fputs($lg_m,
+"<head>
+  <meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\" />
+  <style type=\"text/css\" media=\"screen\">
+  body {
+    font-size: 200%;
+  }
+  </style>
+</head>
+<body>\n");
+		
+    fputs($lg_a,
+"<head>
+  <meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\" />
+  <style type=\"text/css\" media=\"screen\">
+  body {
+    font-size: 200%;
+  }
+  </style>
+</head>
+<body>\n");
+
+		fputs($xm, "<data>\n");
+		fputs($xm, "\t<tag value=\"".GetDayFromSDay($Name)."\">\n");
+		fputs($fp, "<card id=\"".$Name."\" title=\"".GetDayFromSDay($Name)."\">\n");
+
+		for($g=0; $g<3; $g = $g + 2) {
+			if( $g == 0 ) {
+				fputs($fp, "<p><b>Mittagsmensa:</b></p>\n");
+				fputs($xm, "\t\t<mittag>\n");
+				fputs($ht, "\t<tr>\n");
+				fputs($ht, "\t\t<td colspan=\"5\"><b>Mittagsmensa</b></td>\n");
+				fputs($ht, "\t</tr>\n");
+					
+				fputs($cs, "Mittagsmensa\n");
+			} else {
+				fputs($fp, "<p><br /></p>\n\n<p><b>Abendmensa:</b></p>\n");
+				fputs($xm, "\t\t</mittag>\n\t\t<abend>\n");
+				fputs($ht, "\t<tr>\n");
+				fputs($ht, "\t\t<td colspan=\"5\"><b>Abendmensa</b></td>\n");
+				fputs($ht, "\t</tr>\n");
+				
+				fputs($cs, "Abendsmensa\n");
+        
+        fputs($rs, "\t<item>\n");
+			  fputs($rs, "\t\t<title>=== Abendmensa ===</title>\n");
+			  fputs($rs, "\t\t<guid>http://www.trivalg.de/Abendmensa</guid>\n");
+				fputs($rs, "\t</item>\n");
+			}
+				
+			$Print = false;
+			for($j=0; $j<6; $j++) {
+        if( isset($Cell[$h][$g][$j][0]) && $Cell[$h][$g][$j][0] != "Essen" && strlen(dcode(htmlent($Cell[$h][$g][$j][0]))) > 0 ) {
+					fputs($fp, "<p>".dcode(htmlent($Cell[$h][$g][$j][0]))." | ".dcode(htmlent($Cell[$h][$g][$j][2]))."Eur</p>\n");
+					
+          if( !isset($Add) ) {
+            $Add = 0;
+          }
+
+          $Add++;
+					
+					fputs($xm, "\t\t\t<essen nummer=\"$Add\">\n");
+					fputs($xm, "\t\t\t\t<name>".dcode(htmlent($Cell[$h][$g][$j][0]))."</name>\n");
+					fputs($xm, "\t\t\t\t<remark>".dcode(htmlent($Cell[$h][$g][$j][1]))."</remark>\n");
+					fputs($xm, "\t\t\t\t<preis typ=\"stud\">".dcode(htmlent($Cell[$h][$g][$j][2]))."</preis>\n");
+					fputs($xm, "\t\t\t\t<preis typ=\"bed\">".dcode(htmlent($Cell[$h][$g][$j][3]))."</preis>\n");
+					fputs($xm, "\t\t\t\t<preis typ=\"gast\">".dcode(htmlent($Cell[$h][$g][$j][4]))."</preis>\n");
+					fputs($xm, "\t\t\t</essen>\n");
+
+          if( strlen(trim(dcode(htmlent($Cell[$h][$g][$j][2])))) > 2 ) {
+            $P1 = dcode(htmlent($Cell[$h][$g][$j][2])) . " &euro;";
+          } else {
+            $P1 = "";
+          }
+
+          if( strlen(trim(dcode(htmlent($Cell[$h][$g][$j][3])))) > 2 ) {
+            $P2 = dcode(htmlent($Cell[$h][$g][$j][3])) . " &euro;";
+          } else {
+            $P2 = "";
+          }
+
+          if( strlen(trim(dcode(htmlent($Cell[$h][$g][$j][4])))) > 2 ) {
+            $P3 = dcode(htmlent($Cell[$h][$g][$j][4])) . " &euro;";
+          } else {
+            $P3 = "";
+          }
+
+					fputs($ht, "\t<tr>\n");
+					fputs($ht, "\t\t<td>" . dcode(htmlent($Cell[$h][$g][$j][0])) . "</td>\n");
+					fputs($ht, "\t\t<td>" . dcode(htmlent($Cell[$h][$g][$j][1])) . "</td>\n");
+					fputs($ht, "\t\t<td>" . $P1 . "</td>\n");
+					fputs($ht, "\t\t<td>" . $P2 . "</td>\n");
+					fputs($ht, "\t\t<td>" . $P3 . "</td>\n");
+					fputs($ht, "\t</tr>\n");
+
+          if( $g == 0 ) {
+            fputs($lg_m, "<h1>" . dcode(htmlent($Cell[$h][$g][$j][0])) . "</h1>\n");
+          } else {
+            fputs($lg_a, "<h1>" . dcode(htmlent($Cell[$h][$g][$j][0])) . "</h1>\n");
+          }
+
+					fputs($rs, "\t<item>\n");
+					fputs($rs, "\t\t<title>".dcode(htmlent($Cell[$h][$g][$j][0]))."</title>\n");
+					fputs($rs, "\t\t<link>" . $Url . "</link>\n");
+				
+					$String = "";
+					$CSV = "";
+					for($i=0; $i<=4; $i++) {
+						$String .= $Cell[$h][$g][$j][$i] . "|";
+						$CSV .= $Cell[$h][$g][$j][$i] . ";";
+					} 
+					$String = "http://www.trivalg.de/info/" . rawurlencode(sani($String . GetDayFromSDay($Name) . "|" . $Url . "|" . md5(rand())));
+
+					fputs($rs, "\t\t<guid>" . $String . "</guid>\n");
+					fputs($rs, "\t\t<description>Zusatz: " . dcode(htmlent($Cell[$h][$g][$j][1])) . "\nStudent: " . dcode(htmlent($Cell[$h][$g][$j][2])) . "\nBediensteter: " . dcode(htmlent($Cell[$h][$g][$j][3])) . "\nGast: " . dcode(htmlent($Cell[$h][$g][$j][4])) . "</description>\n");
+					fputs($rs, "\t</item>\n");
+
+					fputs($cs, $CSV . "\n");
+
+					$Print = true;
+				}
+			}
+			if( !$Print ) {
+				fputs($fp, "<p>gibts nicht!</p>\n");
+				fputs($ht, "\t<tr>\n\t\t<td colspan=\"5\">gibts nicht!</td>\n\t</tr>\n");
+				fputs($cs, "Gibt es nicht;;;\n");
+        
+        fputs($rs, "\t<item>\n");
+			  fputs($rs, "\t\t<title>Gibt es nicht</title>\n");
+				fputs($rs, "\t</item>\n");
+
+        if( $g == 0 ) {
+          fputs($lg_m, "<h1>Gibt es nicht</h1>\n");
+        } else {
+          fputs($lg_a, "<h1>Gibt es nicht</h1>\n");
+        }
+			}
+		}
+
+		fputs($fp, "<p><br /></p>\n\n");
+
+		fputs($rs, "\t</channel>\n</rss>\n");
+
+
+		fputs($xm, "\t\t</abend>\n");
+
+		fputs($xm, "\t</tag>\n");
+		
+		fputs($xm, "\t<links>\n");
+
+		fputs($ht, "</table>\n<ul>\n");
+
+		for($g=0; $g<count($Names); $g++) {
+			fputs($fp, "<p><a href=\"".$Names[$g].".wml\">".GetDayFromSDay($Names[$g])."</a></p>\n");
+			fputs($xm, "\t\t<link tag=\"".GetDayFromSDay($Names[$g])."\" kurz=\"".$Names[$g]."\">/".str_replace("./", "", $Dir). "/".$Names[$g].".xml</link>\n");
+			fputs($ht, "\t<li><a href=\"" . $Names[$g] . ".html\">" . GetDayFromSDay($Names[$g]) . "</a></li>\n");
+		}
+		fputs($xm, "\t</links>\n");
+
+		fputs($fp, "</card></wml>");
+
+		fputs($xm, "</data>\n");
+
+		fputs($ht, "</ul>\n</body>\n</html>");
+
+    fputs($lg_m, "</body></html>");
+    fputs($lg_a, "</body></html>");
+
+		fclose($fp);
+		fclose($xm);
+		fclose($rs);
+		fclose($ht);
+		fclose($cs);
+	}
+
+	$Now = time();
+	
+	if( date("H", $Now) >= 20 )
+		$Now = $Now + (3600 * 5);
+	while( !is_file($Dir."/".GetSDayFromTimestamp($Now).".wml") )
+		$Now = $Now + 86400;
+
+	system("cp ".$Dir."/".GetSDayFromTimestamp($Now).".wml ".$Dir."/index.wml");
+	system("cp ".$Dir."/".GetSDayFromTimestamp($Now).".xml ".$Dir."/index.xml");
+	system("cp ".$Dir."/".GetSDayFromTimestamp($Now).".rss ".$Dir."/index.rss");
+	system("cp ".$Dir."/".GetSDayFromTimestamp($Now).".html ".$Dir."/index.html");
+	system("cp ".$Dir."/".GetSDayFromTimestamp($Now).".csv ".$Dir."/index.csv");
+	system("cp ".$Dir."/m_".GetSDayFromTimestamp($Now)."_large.html ".$Dir."/m_index_large.html");
+	system("cp ".$Dir."/a_".GetSDayFromTimestamp($Now)."_large.html ".$Dir."/a_index_large.html");
+
+  return 1;
+}
+	
+function GetDayFromSDay($SDay) {
+	switch($SDay) {
+		case "mo":
+			return "Montag";
+		case "di":
+			return "Dienstag";
+		case "mi":
+			return "Mittwoch";
+		case "do":
+			return "Donnerstag";
+		case "fr":
+			return "Freitag";
+		case "sa":
+			return "Samstag";
+		case "so":	
+			return "Sonntag";
+	}
+}
+
+function GetNameFromSection($Section) {
+	$Tag = trim(substr($Section, 0, 1+strpos($Section, ">")));
+	$Tag = substr($Tag, strpos($Tag, "name=")+5, strlen($Tag));
+	$Seperator = substr($Tag, 0, 1);
+	$Tag = substr($Tag, 1, strlen($Tag));
+	
+	$Name = substr($Tag, 0, strpos($Tag, $Seperator));
+	
+	return $Name;
+}
+
+function WeekBegin($tim)
+	{
+	while( date("D", $tim) != "Mon" )
+		$tim = $tim - 86400;
+	$out = mktime(0, 0, 0, date("m", $tim), date("d", $tim), date("Y", $tim));
+	return $out;
+	}
+
+function dcode($string) {
+  /*
+	$string = str_replace("&auml;", "&#xE4;", $string);
+	$string = str_replace("&ouml;", "&#xF6;", $string);
+	$string = str_replace("&uuml;", "&#xFC;", $string);
+	$string = str_replace("&szlig;", "&#xDF;", $string);
+	$string = eregi_replace("&nbsp;", " ", $string);
+  */
+
+  $string = str_replace("&amp;", "&", $string);
+  $string = str_replace("&", "&amp;", $string);
+
+	return $string;
+}
+
+function GetSDayFromTimestamp($TS) {
+	$Day = date("D", $TS);
+
+	switch($Day) {
+		case "Mon":
+			return "mo";
+		case "Tue":
+			return "di";
+		case "Wed":
+			return "mi";
+		case "Thu":	
+			return "do";
+		case "Fri":
+			return "fr";
+		case "Sat":
+			return "sa";
+		case "Sun":
+			return "so";
+	}
+}
+
+function sani($String) {
+	// $String = str_replace("/", "\\", $String);
+	$String = str_replace("/", "SLASH", $String);
+	return $String;
+}
+
+function GetDayI($Day) {
+  $Day = strtolower($Day);
+
+  switch($Day) {
+    case "montag":
+      return 0;
+
+    case "dienstag":
+      return 1;
+
+    case "mittwoch":
+      return 2;
+
+    case "donnerstag":
+      return 3;
+
+    case "freitag": 
+      return 4;
+
+    case "samstag":
+      return 5;
+
+    case "sonntag":
+      return 6;
+    
+    default:
+      return "UNKNOWN";
+  }
+}
+
+function GetDay($Day) {
+  $Day = strtolower($Day);
+
+  switch($Day) {
+    case "montag":
+      return "mo";
+
+    case "dienstag":
+      return "di";
+
+    case "mittwoch":
+      return "mi";
+
+    case "donnerstag":
+      return "do";
+
+    case "freitag": 
+      return "fr";
+
+    case "samstag":
+      return "sa";
+
+    case "sonntag":
+      return "so";
+    
+    default:
+      return "UNKNOWN";
+  }
+}
+
+function GetMonth($Month) {
+  for($h=1; $h<=12; $h++) {
+    $month = strftime("%B" ,mktime(0, 0, 0, $h, 1, date("Y")));
+   
+    if( eregi($month, $Month) ) {
+      break;
+    }
+  }
+
+  if( $h>12 ) {
+    return -1;
+  }
+
+  return $h;
+}
+
+function htmlent($String) {
+  return $String;
+}
+
+?>
