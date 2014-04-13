@@ -1,0 +1,86 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+<head>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8">
+    <style type="text/css" title="AppleStyle">
+        @import "Mensawidget.css";
+        @import "SafariStyle.css";
+    </style>
+    
+    <script type="text/javascript" src="AppleClasses/AppleButton.js" charset="utf-8"></script>
+    
+    
+    
+    <script type="text/javascript" src="localizedStrings.js" charset="utf-8"></script>
+    <script type="text/javascript" src="attributes.js" charset="utf-8"></script>
+    <script type="text/javascript" src="Parts/utilities.js" charset="utf-8"></script>
+    <script type="text/javascript" src="Parts/setup.js" charset="utf-8"></script>
+    
+    
+    <script type="text/javascript" src="Parts/Shape.js"></script>
+    
+    <script type="text/javascript" src="Parts/Text.js" charset="utf-8"></script>
+    <script type="text/javascript" src="Mensawidget.js" charset="utf-8"></script>
+
+
+<script type="text/javascript" src="Parts/Button.js" charset="utf-8"></script>
+</head>
+<body onload="load();">
+    <div id="front">
+        <img id="frontImg" src="Images/front.png" alt="">
+            
+        <div id="topRectangleShape"></div>
+    
+        
+        <div id="feedTitle"></div>
+        
+        
+        
+    <select id="mensa" onchange="SetNewFeedURL(event)">
+	
+	
+	
+    <option id="option" value="kath">Katharinenstraße</option>
+    <option id="option1" value="kath_b">Katharinenstraße Folgewoche</option>
+
+    <option id="option2" value="360">360°</option>
+    <option id="option3" value="360_b">360° Folgewoche</option>
+
+    <option id="option4" value="beeth">Beethovenstraße</option>
+    <option id="option5" value="beeth_b">Beethovenstraße Folgewoche</option>
+        
+    <option id="option6" value="hbk">HBK</option>
+    <option id="option7" value="hbk_b">HBK Folgewoche</option>
+        
+        
+    </select>
+    
+    
+    
+    <select id="tag" onchange="SetNewFeedURL(event)">
+	
+	
+	
+
+    
+    
+    <option id="option3" value="mo">Montag</option>
+    <option id="option8" value="di">Dienstag</option>
+    <option id="option9" value="mi">Mittwoch</option>
+    <option id="option10" value="do">Donnerstag</option>
+    <option id="option11" value="fr">Freitag</option>
+    <option id="option12" value="sa">Samstag</option>
+    
+    
+    
+    </select>
+    
+    <div id="button"></div>
+    <div id="content" class="content" style="position: absolute; overflow-x: hidden; overflow-y: hidden; top: 129px; bottom: -249px; left: 20px; "></div>
+    <div apple-text-overflow="ellipsis" id="heading"></div>
+    
+    
+    </div>
+
+</body>
+</html>
